@@ -1,24 +1,105 @@
-// middleware/auth.js
+const express = require('express');
+const router = express.Router();
+const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
-module.exports = function (req, res, next) {
+// --- SIGNUP ROUTE ---
+// POST /api/auth/signup
+router.post('/signup', async (req, res) => {
+  const { username, email, password } = req.body;
+
   try {
-    const auth = req.headers.authorization || req.headers.Authorization;
-    if (!auth) return res.status(401).json({ error: 'No token provided' });
-
-    // header format: "Bearer <token>"
-    const parts = auth.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      return res.status(401).json({ error: 'Invalid token format' });
+    // 1. Check if user already exists
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ error: 'User already exists with that email' });
+    }
+    
+    user = await User.findOne({ username });
+    if (user) {
+        return res.status(400).json({ error: 'User already exists with that username' });
     }
 
-    const token = parts[1];
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    // put user id on request
-    req.userId = payload.id || payload.sub || payload._id;
-    return next();
+    // 2. Create new user
+    user = new User({
+      username,
+      email,
+      password,
+    });
+
+    // 3. Hash password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+
+    // 4. Save user to database
+    await user.save();
+
+    // 5. Send success response
+    res.status(201).json({ message: 'User registered successfully' });
+
   } catch (err) {
-    console.error('auth middleware error:', err.message);
-    return res.status(401).json({ error: 'Invalid token' });
+    console.error('SIGNUP ERROR:', err.message);
+    res.status(500).json({ error: 'Server error during signup' });
   }
-};
+});
+
+// --- LOGIN ROUTE ---
+// POST /api/auth/login
+// routes/authRoutes.js (replace the login route with this)
+
+
+
+
+// Improved Login Route
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Basic validation
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    // Ensure user has a password field
+    if (!user.password) {
+      console.error("User exists but has no password field", user);
+      return res.status(500).json({ error: "User record incomplete — contact admin" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: "Incorrect password" });
+    }
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error("Missing JWT_SECRET in environment");
+      return res.status(500).json({ error: "Server misconfigured (JWT secret missing)" });
+    }
+
+    const token = jwt.sign({ id: user._id }, secret, { expiresIn: "1d" });
+
+    // Remove password from response
+    const userSafe = user.toObject();
+    delete userSafe.password;
+
+    res.json({ message: "Login successful ✅", token, user: userSafe });
+  } catch (err) {
+    // LOG THE FULL ERROR (stack) — you'll see this in the server terminal
+    console.error("Login route error:", err && err.stack ? err.stack : err);
+    res.status(500).json({ error: "Server error during login" });
+  }
+});
+
+
+
+
+module.exports = router;
