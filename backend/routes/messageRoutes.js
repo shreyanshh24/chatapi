@@ -15,5 +15,16 @@ router.get('/:conversationId', auth, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+router.post('/', async (req, res) => {
+  const { conversationId, text, sender, clientId } = req.body;
+  if (!conversationId || !text || !sender) return res.status(400).json({ error: 'Missing fields' });
+  try {
+    const msg = await Message.create({ conversationId, text, sender, clientId });
+    res.json({ message: msg });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not create message' });
+  }
+});
 
 module.exports = router;
