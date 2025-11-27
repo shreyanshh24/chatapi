@@ -2,12 +2,11 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
  * POST /api/ai/chat
  * Body: { message: string, history?: [{ role: "user"|"assistant", content: string }] }
- *
- * Right now this is a dummy "AI". You can plug real Gemini/OpenAI here.
  */
 router.post("/chat", auth, async (req, res) => {
   try {
@@ -17,11 +16,23 @@ router.post("/chat", auth, async (req, res) => {
       return res.status(400).json({ error: "message is required" });
     }
 
-    // 👉 PLACEHOLDER: here is where you'd call real AI
-    // Example "fake intelligence":
-    const lastUserLine = message.slice(0, 200);
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const reply = `You said: "${lastUserLine}". I'm a demo AI — wire me up to real Gemini/OpenAI in /routes/aiRoutes.js.`;
+    // Convert history to Gemini format
+    // Gemini expects: { role: "user" | "model", parts: [{ text: "..." }] }
+    const chatHistory = history.map((msg) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }));
+
+    const chat = model.startChat({
+      history: chatHistory,
+    });
+
+    const result = await chat.sendMessage(message);
+    const response = await result.response;
+    const reply = response.text();
 
     return res.json({ reply });
   } catch (err) {
