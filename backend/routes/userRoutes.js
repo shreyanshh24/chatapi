@@ -4,22 +4,19 @@ const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 
 // GET /api/users/me
-// (This route is already fixed and working)
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
-    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
     res.json({ user });
-
   } catch (err) {
     console.error('GET /me error', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // GET /api/users/search?q=some
 router.get('/search', async (req, res) => {
   try {
@@ -27,13 +24,11 @@ router.get('/search', async (req, res) => {
     if (!q) return res.json([]);
     const byRegex = { $regex: q, $options: 'i' };
 
-    // allow searching by id or by name/email
     const or = [
       { username: byRegex },
       { email: byRegex }
     ];
 
-    // if the user typed a probable ObjectId, include that too
     if (/^[0-9a-fA-F]{24}$/.test(q)) or.push({ _id: q });
 
     const users = await User.find({ $or: or }).select('-password');
@@ -44,12 +39,9 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// --- NEW ROUTE ---
 // GET /api/users/all
-// Gets all users *except* the currently logged-in one
 router.get('/all', authMiddleware, async (req, res) => {
   try {
-    // req.user._id is from the authMiddleware
     const users = await User.find({ _id: { $ne: req.user._id } }).select('-password');
     res.json(users);
   } catch (err) {
@@ -58,5 +50,26 @@ router.get('/all', authMiddleware, async (req, res) => {
   }
 });
 
+// PUT /api/users/me
+router.put("/me", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    if (req.body.username) user.username = req.body.username;
+    if (req.body.avatarUrl) user.avatarUrl = req.body.avatarUrl;
+    if (typeof req.body.isCloneEnabled === "boolean") {
+      user.isCloneEnabled = req.body.isCloneEnabled;
+    }
+
+    await user.save();
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.json(userObj);
+  } catch (err) {
+    console.error("PUT /me error", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 module.exports = router;
