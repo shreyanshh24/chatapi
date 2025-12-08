@@ -18,7 +18,7 @@ router.post("/chat", auth, async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // Convert history to Gemini format
     // Gemini expects: { role: "user" | "model", parts: [{ text: "..." }] }
@@ -116,7 +116,7 @@ Reply to the last message in the conversation, strictly adhering to the persona 
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       systemInstruction: systemInstruction,
     });
 

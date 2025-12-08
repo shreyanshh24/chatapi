@@ -4,7 +4,8 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    background: var(--bg-gradient);
+    background: url('./assets/login-bg.jpg') no-repeat center center fixed;
+    background-size: cover;
     padding: 20px;
 }
 

@@ -245,6 +245,12 @@ function ContactItem({ contact, selected, onClick, online, unread = 0, lastMessa
           border: '2px solid var(--sidebar-bg)',
           boxShadow: '0 0 0 1px var(--glass-border)'
         }} />
+        {/* Unread Badge on Avatar (visible when collapsed or mobile) */}
+        {unread > 0 && (
+          <div className="avatar-unread-badge">
+            {unread > 99 ? '99+' : unread}
+          </div>
+        )}
       </div>
 
       <div className="contact-meta">
@@ -399,10 +405,18 @@ export default function Dashboard({ user, onLogout }) {
     document.body.style.userSelect = "auto";
   };
 
-  // Title Notification
+  // Title Notification & App Badge
   useEffect(() => {
     const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
     document.title = totalUnread > 0 ? `(${totalUnread}) Chat App` : "Chat App";
+
+    if ('setAppBadge' in navigator) {
+      if (totalUnread > 0) {
+        navigator.setAppBadge(totalUnread).catch((e) => console.error(e));
+      } else {
+        navigator.clearAppBadge().catch((e) => console.error(e));
+      }
+    }
   }, [unreadCounts]);
 
   /* SOCKET SETUP */

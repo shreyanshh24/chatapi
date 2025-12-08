@@ -4,6 +4,22 @@ import { io } from 'socket.io-client';
 import api from './api';
 import { getConversationId } from './utils/conversationId';
 
+const isSameDay = (d1, d2) => {
+  return d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+};
+
+const formatDateLabel = (date) => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (isSameDay(date, today)) return 'Today';
+  if (isSameDay(date, yesterday)) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 let socket; // singleton socket across component mounts (optional)
 
 export default function ChatWindow({ user, contact }) {
@@ -90,22 +106,38 @@ export default function ChatWindow({ user, contact }) {
       </div>
 
       <div ref={messagesRef} className="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-        {messages.map((m) => (
-          <div key={m._id} style={{ marginBottom: 8, textAlign: m.sender === user._id ? 'right' : 'left' }}>
-            <div style={{
-              display: 'inline-block',
-              padding: '8px 12px',
-              borderRadius: 12,
-              background: m.sender === user._id ? '#2b6cb0' : '#e2e8f0',
-              color: m.sender === user._id ? 'white' : 'black',
-            }}>
-              {m.text}
-            </div>
-            <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
-              {new Date(m.createdAt || m.ts || Date.now()).toLocaleTimeString()}
-            </div>
-          </div>
-        ))}
+        {messages.map((m, index) => {
+          const msgDate = new Date(m.createdAt || m.ts || Date.now());
+          const prevMsg = messages[index - 1];
+          const prevDate = prevMsg ? new Date(prevMsg.createdAt || prevMsg.ts || Date.now()) : null;
+          const showHeader = !prevDate || !isSameDay(prevDate, msgDate);
+
+          return (
+            <React.Fragment key={m._id}>
+              {showHeader && (
+                <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '13px', color: '#888', fontWeight: '500' }}>
+                  <span style={{ background: '#f0f2f5', padding: '4px 12px', borderRadius: '12px' }}>
+                    {formatDateLabel(msgDate)}
+                  </span>
+                </div>
+              )}
+              <div style={{ marginBottom: 8, textAlign: m.sender === user._id ? 'right' : 'left' }}>
+                <div style={{
+                  display: 'inline-block',
+                  padding: '8px 12px',
+                  borderRadius: 12,
+                  background: m.sender === user._id ? '#2b6cb0' : '#e2e8f0',
+                  color: m.sender === user._id ? 'white' : 'black',
+                }}>
+                  {m.text}
+                </div>
+                <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                  {msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
       </div>
 
       <form onSubmit={send} style={{ display: 'flex', padding: 12, borderTop: '1px solid #eee' }}>
