@@ -9,6 +9,8 @@ const UserSchema = new mongoose.Schema({
   avatarUrl: { type: String, default: "" },
   lastSeen: { type: Date, default: Date.now },
   isCloneEnabled: { type: Boolean, default: false },
+  friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 });
 
 module.exports = mongoose.model("User", UserSchema);

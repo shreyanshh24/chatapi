@@ -37,8 +37,10 @@ const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const aiRoutes = require("./routes/aiRoutes");
+const friendRoutes = require("./routes/friendRoutes"); // New
 
 app.use("/api/ai", aiRoutes);
+app.use("/api/friends", friendRoutes); // New
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -54,8 +56,7 @@ const io = new Server(server, {
   },
 });
 
-
-
+app.set("io", io); // Make io accessible in routes
 
 /* AUTH MIDDLEWARE */
 io.use((socket, next) => {
@@ -77,13 +78,6 @@ function broadcastPresence() {
   onlineUsers.forEach((sockets, uid) => {
     summary[uid] = { online: sockets.size > 0, lastSeen: null };
   });
-  io.emit("presence:summary", summary);
-}
-function broadcastPresence() {
-  const summary = {};
-  onlineUsers.forEach((sockets, uid) => {
-    summary[uid] = { online: sockets.size > 0, lastSeen: null };
-  });
 
   io.emit("presence:summary", summary);
 }
@@ -93,6 +87,7 @@ io.on("connection", (socket) => {
 
   /* Mark Online */
   if (socket.userId) {
+    socket.join(socket.userId); // Join personal room
     if (!onlineUsers.has(socket.userId)) onlineUsers.set(socket.userId, new Set());
     onlineUsers.get(socket.userId).add(socket.id);
 

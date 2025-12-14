@@ -332,6 +332,201 @@ function LinkifiedText({ text }) {
   );
 }
 
+/* ---------- Friend Manager Component ---------- */
+function FriendManager({ onClose, onUpdate }) {
+  const [tab, setTab] = useState("requests"); // 'requests' | 'add'
+  const [requests, setRequests] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  const loadRequests = async () => {
+    try {
+      const res = await api.get("/friends/requests");
+      setRequests(res.data || []);
+    } catch (err) {
+      console.error("Failed to load requests", err);
+    }
+  };
+
+  const searchUsers = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setLoading(true);
+    try {
+      const res = await api.get(`/friends/search?query=${encodeURIComponent(searchQuery)}`);
+      setSearchResults(res.data || []);
+    } catch (err) {
+      console.error("Search failed", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendRequest = async (username) => {
+    try {
+      await api.post("/friends/request", { targetUsername: username });
+      setMsg(`Request sent to ${username}`);
+      setTimeout(() => setMsg(""), 3000);
+      // Remove from search results to avoid duplicate sends (optional)
+      setSearchResults(prev => prev.filter(u => u.username !== username));
+    } catch (err) {
+      setMsg(err.response?.data?.error || "Failed to send request");
+      setTimeout(() => setMsg(""), 3000);
+    }
+  };
+
+  const handleResponse = async (requesterId, action) => {
+    try {
+      if (action === "accept") {
+        await api.post("/friends/accept", { requesterId });
+        setMsg("Friend accepted!");
+        onUpdate(); // Reload dashboard friends
+      } else {
+        await api.post("/friends/reject", { requesterId });
+        setMsg("Request rejected.");
+      }
+      setTimeout(() => setMsg(""), 3000);
+      loadRequests(); // Reload requests
+    } catch (err) {
+      console.error("Action failed", err);
+      setMsg("Action failed");
+    }
+  };
+
+  return (
+    <div className="chat-window">
+      <div className="chat-header">
+        <div className="chat-title">
+          <div>
+            <div className="chat-name">Manage Friends</div>
+            <div className="chat-sub">Add new friends or manage requests</div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          ✕
+        </button>
+      </div>
+
+      <div style={{ padding: 24 }}>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 24, paddingBottom: 12, borderBottom: '1px solid var(--glass-border)' }}>
+          <button
+            onClick={() => setTab("requests")}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: tab === "requests" ? 'var(--primary-color)' : 'var(--text-secondary)',
+              fontWeight: tab === "requests" ? 600 : 400,
+              cursor: 'pointer',
+              fontSize: 15
+            }}
+          >
+            Requests ({requests.length})
+          </button>
+          <button
+            onClick={() => setTab("add")}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: tab === "add" ? 'var(--primary-color)' : 'var(--text-secondary)',
+              fontWeight: tab === "add" ? 600 : 400,
+              cursor: 'pointer',
+              fontSize: 15
+            }}
+          >
+            Add Friend
+          </button>
+        </div>
+
+        {msg && <div style={{ marginBottom: 16, color: 'var(--primary-color)', fontWeight: 600 }}>{msg}</div>}
+
+        {tab === "requests" && (
+          <div>
+            {requests.length === 0 ? (
+              <div style={{ color: 'var(--text-secondary)' }}>No pending requests.</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {requests.map(req => (
+                  <div key={req._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, background: 'var(--glass-bg)', borderRadius: 12, border: '1px solid var(--glass-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Avatar name={req.username} size={40} />
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{req.username}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{req.email}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => handleResponse(req._id, 'accept')}
+                        style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', cursor: 'pointer', fontSize: 13 }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleResponse(req._id, 'reject')}
+                        style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "add" && (
+          <div>
+            <form onSubmit={searchUsers} style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+              <input
+                className="search-input"
+                placeholder="Search by username..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={loading}
+                style={{ width: 'auto' }}
+              >
+                {loading ? "..." : "Search"}
+              </button>
+            </form>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              {searchResults.length > 0 && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>Results:</div>}
+              {searchResults.map(u => (
+                <div key={u._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, background: 'var(--glass-bg)', borderRadius: 12, border: '1px solid var(--glass-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Avatar name={u.username} size={40} />
+                    <div style={{ fontWeight: 600 }}>{u.username}</div>
+                  </div>
+                  <button
+                    onClick={() => sendRequest(u.username)}
+                    style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--primary-color)', background: 'transparent', color: 'var(--primary-color)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    Add +
+                  </button>
+                </div>
+              ))}
+              {searchResults.length === 0 && searchQuery && !loading && (
+                <div style={{ color: 'var(--text-secondary)' }}>No users found.</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Main Dashboard component ---------- */
 
 export default function Dashboard({ user, onLogout }) {
@@ -342,10 +537,15 @@ export default function Dashboard({ user, onLogout }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [requestCount, setRequestCount] = useState(0);
   const [presence, setPresence] = useState({});
   const [typingUsers, setTypingUsers] = useState({});
   const [showProfile, setShowProfile] = useState(false);
+  const [showFriendManager, setShowFriendManager] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
+
+  // Custom Modal State
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   const scrollRef = useRef();
   const searchInputRef = useRef(null);
@@ -353,6 +553,7 @@ export default function Dashboard({ user, onLogout }) {
   const typingTimer = useRef(null);
   const selectedRef = useRef(null);
   const processedUnreadRef = useRef(new Set());
+  const processedRef = useRef(new Set());
   const sidebarRef = useRef(null);
   const isResizingRef = useRef(false);
 
@@ -368,6 +569,11 @@ export default function Dashboard({ user, onLogout }) {
       return [];
     }
   });
+
+  // Persist recentChats
+  useEffect(() => {
+    localStorage.setItem(`recentChats_${user._id}`, JSON.stringify(recentChats));
+  }, [recentChats, user._id]);
 
   // Theme effect
   useEffect(() => {
@@ -405,6 +611,36 @@ export default function Dashboard({ user, onLogout }) {
     document.body.style.userSelect = "auto";
   };
 
+  // Sync recentChats with current conversation's last message
+  useEffect(() => {
+    if (!selected || messages.length === 0) return;
+
+    const lastMsg = messages[messages.length - 1];
+    const text = lastMsg.text || (lastMsg.file ? "Attachment" : "");
+    if (!text) return;
+
+    const partnerId = selected._id;
+    const conversationId = getConversationId(user._id, partnerId);
+
+    // Don't sync for AI (handled differently)
+    if (partnerId === GEMINI_ID || partnerId === CLONE_ID) return;
+
+    setRecentChats(prev => {
+      const existing = prev.find(r => r.conversationId === conversationId);
+      // Only update if it's different or missing
+      if (existing && existing.lastMessage === text) return prev;
+
+      const filtered = prev.filter(r => r.conversationId !== conversationId);
+      const newItem = {
+        conversationId,
+        partnerId,
+        lastMessage: text,
+        time: new Date(lastMsg.createdAt || lastMsg.ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      return [newItem, ...filtered];
+    });
+  }, [messages, selected, user._id]);
   // Title Notification & App Badge
   useEffect(() => {
     const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
@@ -420,6 +656,11 @@ export default function Dashboard({ user, onLogout }) {
   }, [unreadCounts]);
 
   /* SOCKET SETUP */
+  // Sync Ref with State to ensure listeners have latest value
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     const socket = io(SOCKET_URL, {
@@ -430,6 +671,24 @@ export default function Dashboard({ user, onLogout }) {
 
     socket.on("connect", () => {
       console.log("Socket connected", socket.id);
+
+      // Re-join active conversation on reconnect
+      const current = selectedRef.current;
+      if (current && current._id) {
+        const otherId = current._id;
+        let conversationId;
+        if (otherId === "gemini-ai" || otherId === GEMINI_ID) {
+          conversationId = `ai-${user._id}`;
+        } else if (otherId === "ai-clone" || otherId === CLONE_ID) {
+          conversationId = `clone-${user._id}`;
+        } else {
+          conversationId = getConversationId(user._id, otherId);
+        }
+        if (conversationId) {
+          console.log("Re-joining room:", conversationId);
+          socket.emit("join", conversationId);
+        }
+      }
     });
 
     socket.on("connect_error", (err) => {
@@ -473,34 +732,37 @@ export default function Dashboard({ user, onLogout }) {
     socket.on("message:new", (msg) => {
       if (!msg || !msg.conversationId) return;
 
-      // 1) messages list
+      // 1) messages: Only append if it belongs to the OPEN conversation
       setMessages((prev) => {
-        if (msg._id && prev.some((m) => String(m._id) === String(msg._id))) {
+        const currentSelected = selectedRef.current;
+        const activeConv = currentSelected
+          ? getConversationId(user._id, currentSelected._id)
+          : null;
+
+        // Debug Log
+        console.log("Msg received:", {
+          msgConv: msg.conversationId,
+          activeConv,
+          currentSelected: currentSelected?.username,
+          match: msg.conversationId === activeConv
+        });
+
+        // If not the active conversation, do not touch messages state
+        if (msg.conversationId !== activeConv) {
           return prev;
         }
 
-        if (msg.localId) {
-          const idx = prev.findIndex((m) => m.localId === msg.localId);
-          if (idx !== -1) {
-            const copy = [...prev];
-            copy[idx] = msg;
-            return copy;
-          }
-        }
+        // Deduplication
+        if (processedRef.current.has(msg._id || msg.localId)) return prev;
+        processedRef.current.add(msg._id || msg.localId);
 
-        const incomingTs = msg.createdAt
-          ? new Date(msg.createdAt).getTime()
-          : msg.ts || Date.now();
-
-        const localIdx = prev.findIndex((m) => {
-          if (!String(m._id || "").startsWith("local-")) return false;
-          const sameText = m.text === msg.text;
-          const sameSender = String(m.sender) === String(msg.sender);
-          const localTs =
-            m.ts || (m.createdAt ? new Date(m.createdAt).getTime() : 0);
-          const diff = Math.abs((localTs || 0) - (incomingTs || 0));
-          return sameText && sameSender && diff < 10000;
-        });
+        // Optimistic replace?
+        const localIdx = prev.findIndex(
+          (m) =>
+            m.localId &&
+            msg.localId &&
+            m.localId === msg.localId
+        );
 
         if (localIdx !== -1) {
           const copy = [...prev];
@@ -511,7 +773,7 @@ export default function Dashboard({ user, onLogout }) {
         return [...prev, msg];
       });
 
-      // 2) recentChats
+      // 2) recentChats: Update for ALL conversations
       setRecentChats((prev) => {
         // Don't add AI chats to recent list (they are hardcoded)
         if (msg.conversationId.startsWith("ai-") || msg.conversationId.startsWith("clone-")) {
@@ -554,8 +816,6 @@ export default function Dashboard({ user, onLogout }) {
             console.log("Triggering notification for", msg.sender);
             showNotification("New Message", msg.text);
           }
-        } else {
-          console.log("Msg skipped unread:", { activeConv, msgConv: msg.conversationId, has: processedUnreadRef.current.has(msg._id) });
         }
       }
     });
@@ -573,6 +833,15 @@ export default function Dashboard({ user, onLogout }) {
       );
     });
 
+    socket.on("friend:refresh", () => {
+      loadFriendsAndRequests();
+    });
+
+    socket.on("friend:request", () => {
+      loadFriendsAndRequests();
+      showNotification("New Friend Request", "Someone sent you a friend request!");
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
@@ -586,29 +855,33 @@ export default function Dashboard({ user, onLogout }) {
   }, []);
 
   /* LOAD USERS */
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
+  /* LOAD FRIENDS & REQUESTS */
+  const loadFriendsAndRequests = async () => {
+    try {
       setLoading(true);
-      try {
-        const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-        const res = await axios.get(`${API_URL}/api/users/all`, {
+      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+      const [friendsRes, requestsRes] = await Promise.all([
+        axios.get(`${API_URL}/api/friends/list`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        if (!mounted) return;
-        const data = res.data;
-        const list = Array.isArray(data) ? data : data.users || data;
-        setContacts(list || []);
-      } catch (err) {
-        console.error("Failed to load users", err);
-        setContacts([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
+        }),
+        axios.get(`${API_URL}/api/friends/requests`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        })
+      ]);
+
+      setContacts(friendsRes.data || []);
+      const reqs = requestsRes.data || [];
+      setRequestCount(reqs.length);
+    } catch (err) {
+      console.error("Failed to load friends", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFriendsAndRequests();
   }, []);
 
   /* PERSIST RECENT CHATS */
@@ -902,8 +1175,33 @@ export default function Dashboard({ user, onLogout }) {
     return p ? p.online === true : undefined;
   };
 
+  /* REMOVE FRIEND CONFIRMATION */
+  const handleRemoveFriend = () => {
+    if (!selected || !selected._id) return;
+    setShowRemoveConfirm(true);
+  };
+
+  const confirmRemoveFriend = async () => {
+    if (!selected || !selected._id) return;
+
+    try {
+      await api.post("/friends/remove", { friendId: selected._id });
+      // UI update
+      setSelected(null);
+      selectedRef.current = null;
+      setMessages([]);
+      loadFriendsAndRequests();
+      setShowRemoveConfirm(false);
+    } catch (err) {
+      console.error("Failed to remove friend", err);
+      showNotification("Error", "Could not remove friend");
+      setShowRemoveConfirm(false);
+    }
+  };
+
   const recentContacts = recentChats
     .filter(r => !r.conversationId.startsWith("ai-") && !r.conversationId.startsWith("clone-"))
+    .filter(r => contacts.some(c => String(c._id) === String(r.partnerId))) // Only show if friend
     .map((r) => {
       const partner = contacts.find((c) => String(c._id) === String(r.partnerId));
       const contact = partner || { _id: r.partnerId, username: r.partnerId };
@@ -950,6 +1248,37 @@ export default function Dashboard({ user, onLogout }) {
             </button>
             <button className="btn-logout" onClick={onLogout}>
               Logout
+            </button>
+            <button
+              className="btn-logout"
+              style={{ background: 'var(--primary-color)', color: 'white', border: 'none', position: 'relative' }}
+              onClick={() => {
+                setShowProfile(false);
+                setSelected(null);
+                setShowFriendManager(true);
+              }}
+              title="Manage Friends"
+            >
+              +
+              {requestCount > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: -5,
+                  right: -5,
+                  background: '#ef4444',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: 16,
+                  height: 16,
+                  fontSize: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid var(--sidebar-bg)'
+                }}>
+                  {requestCount}
+                </div>
+              )}
             </button>
           </div>
         </div>
@@ -1035,6 +1364,7 @@ export default function Dashboard({ user, onLogout }) {
                       selected={selected && selected._id === c._id}
                       onClick={openChat}
                       online={isOnline(c._id)}
+                      unread={unreadCounts[c._id] || 0}
                     />
                   ))
               )}
@@ -1053,6 +1383,11 @@ export default function Dashboard({ user, onLogout }) {
       <main className="chat-area">
         {showProfile ? (
           <ProfilePanel user={user} theme={theme} toggleTheme={toggleTheme} />
+        ) : showFriendManager ? (
+          <FriendManager
+            onClose={() => setShowFriendManager(false)}
+            onUpdate={loadFriendsAndRequests}
+          />
         ) : !selected ? (
           <div className="empty-chat">
             <div style={{ fontSize: 48, marginBottom: 16 }}>👋</div>
@@ -1077,6 +1412,20 @@ export default function Dashboard({ user, onLogout }) {
                   </div>
                 </div>
               </div>
+              {/* Remove Friend Button (only for real users) */}
+              {selected._id !== GEMINI_ID && selected._id !== CLONE_ID && (
+                <button
+                  className="btn-remove"
+                  onClick={handleRemoveFriend}
+                  title="Remove Friend"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span>Remove Friend</span>
+                </button>
+              )}
             </div>
 
             <div className="messages" ref={scrollRef}>
@@ -1165,6 +1514,66 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         )}
       </main>
+      {/* Custom Confirmation Modal */}
+      {showRemoveConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            padding: 24,
+            borderRadius: 16,
+            width: 320,
+            maxWidth: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Remove Friend?</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+              Are you sure you want to remove <strong>{selected?.username}</strong> as a friend?
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowRemoveConfirm(false)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--glass-border)',
+                  color: 'var(--text-primary)',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRemoveFriend}
+                style={{
+                  background: '#ef4444',
+                  border: 'none',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
